@@ -143,8 +143,26 @@ An application can give its order service the same input from every way an order
 
 ## Tests
 
-- Each marketplace has a local copy for tests, as HotWax's TikTok connector does.
+- Each marketplace has a local copy for tests, built from its own test site and saved replies.
 - Saved real responses, with made-up shops and buyers.
+
+## Learn from
+
+"Use" means the code may be used or adapted under its license. "Ideas only" means read it, but write our own code.
+
+| Source | What to take | License | How |
+| --- | --- | --- | --- |
+| [amzn/selling-partner-api-models](https://github.com/amzn/selling-partner-api-models) | Amazon's exact API definitions | Apache 2.0 | Use |
+| [amzn/selling-partner-api-sdk](https://github.com/amzn/selling-partner-api-sdk) | Amazon's official Java client, login and token handling | Apache 2.0 | Use |
+| [amzn/selling-partner-api-samples](https://github.com/amzn/selling-partner-api-samples) | Order notices through SQS with a dead-letter queue; multi-channel fulfillment, AWD and label recipes | MIT-0 | Use |
+| [saleweaver/python-amazon-sp-api](https://github.com/saleweaver/python-amazon-sp-api) | How a widely used client handles paging, rate limits and Restricted Data Tokens | MIT | Use |
+| [EcomPHP/tiktokshop-php](https://github.com/EcomPHP/tiktokshop-php) | TikTok request signing, approval flow, notice signatures, and the order, fulfillment, stock and return calls | Apache 2.0 | Use |
+| [whitebox-co/walmart-marketplace-api](https://github.com/whitebox-co/walmart-marketplace-api) | Walmart login, orders, shipping, stock, returns and notices | MIT | Use |
+| [eBay/ebay-oauth-java-client](https://github.com/eBay/ebay-oauth-java-client) | eBay's official Java login client | Apache 2.0 | Use |
+| [ledoent/connector-amazon](https://github.com/ledoent/connector-amazon) (Odoo) | One add-on per workflow: orders, stock, returns, labels, FBA, MCF, fees | AGPL | Ideas only |
+| [frappe/ecommerce_integrations](https://github.com/frappe/ecommerce_integrations) (ERPNext) | Settings per shop, order and fee import; what breaks without Amazon address access | GPL | Ideas only |
+
+Each marketplace's own developer documents are the first source for every call.
 
 ## Points for the design review
 
