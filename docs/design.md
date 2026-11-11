@@ -10,7 +10,8 @@ TikTok Shop comes first and is the template for the others.
 3. The plugin fetches the full order from the marketplace and turns it into the common order.
 4. If the shop has a hold time, the order waits. The marketplace's own hold also counts, such as TikTok's one-hour buyer window.
 5. When the hold ends, the plugin calls the order handler named in data. A warehouse application, for example, names its order service.
-6. A regular check lists orders changed since the last check. It finds any order whose notice was lost.
+6. When the handler records the order, the plugin accepts it on the marketplace, where the marketplace asks for that. Walmart does.
+7. A regular check lists orders changed since the last check. It finds any order whose notice was lost.
 
 Example: a TikTok buyer places order 5761. The notice arrives and is saved. The plugin fetches the order and holds it until the buyer window ends. Then it calls the order handler, which records order 1090 with `externalId` 5761.
 
@@ -65,6 +66,13 @@ Example: a TikTok buyer places order 5761. The notice arrives and is saved. The 
 | `releaseDate` | When a held order may go |
 | `tryCount`, `nextTryDate`, `lastError` | Retries |
 
+`MarketplaceShopLocation` maps a warehouse to the shop's location on the marketplace. Stock is set per location:
+
+| Field | Meaning |
+| --- | --- |
+| `marketplaceShopId`, `facilityId` | Key |
+| `externalLocationId` | Walmart's ship node, TikTok's warehouse id, eBay's merchant location key, or Amazon's fulfillment channel |
+
 Each marketplace adds a login record keyed by the shop, such as `MarketplaceShopTikTok`. Tokens use `encrypt="true"`.
 
 ## Services
@@ -78,10 +86,12 @@ Each marketplace adds a login record keyed by the shop, such as `MarketplaceShop
 | `checkMarketplaceShop` | `marketplaceShopId` | `passed`, the marketplace's reason |
 | `cancelMarketplaceOrder` | `orderId`, the lines, a reason | `marketplaceMessageId` |
 | `confirmMarketplaceShipment` | `shipmentId` | `marketplaceMessageId` |
-| `pushMarketplaceStock` | `marketplaceShopId`, a list of product and quantity | the products that failed |
+| `answerMarketplaceCancelRequest` | `marketplaceMessageId`, approve or reject, a reason | `marketplaceMessageId` |
+| `pushMarketplaceStock` | `marketplaceShopId`, a list of product, facility and quantity | the products that failed |
+| `answerMarketplaceReturn` | `marketplaceMessageId`, approve or reject, a reason | `marketplaceMessageId` |
 | `retryMarketplaceMessage` | `marketplaceMessageId` | `statusId` |
 
-`confirmMarketplaceShipment` reads the shipment's order, lines, carrier and tracking. A shipment with only some lines is sent as a split shipment.
+`confirmMarketplaceShipment` reads the shipment's packages, the lines in each, carrier and tracking. Each package goes to the marketplace with its own lines. A shipment with only some lines is sent as a split shipment.
 
 ### Jobs and notice intake
 
@@ -107,23 +117,46 @@ Amazon sends its notices to an AWS SQS queue. A message queue channel reads it, 
 
 ### Contract every marketplace follows
 
-| Interface | Does |
+Each marketplace package implements these. A step a marketplace does not need returns success and does nothing.
+
+| Workflow | Interface | Does | TikTok Shop | Walmart | Amazon | eBay |
+| --- | --- | --- | --- | --- | --- | --- |
+| Connect | `marketplaceStartAuthorizationInterface` | Builds the approval link | approval link | solution provider approval | app approval link | OAuth consent link |
+| | `marketplaceCompleteAuthorizationInterface` | Turns the returned code into tokens, and finds the shop's id | code exchange, authorized shops | token | token | token |
+| | `marketplaceRefreshTokenInterface` | Gets a new access token before the old one expires | refresh | token | refresh | refresh |
+| | `marketplaceCheckShopInterface` | Tests the tokens and the shop | authorized shops | token detail | seller account | account |
+| Notices | `marketplaceSubscribeNoticesInterface` | Points the marketplace's notices to OFBiz | shop webhooks | subscriptions | SQS destination and subscription | notification subscriptions |
+| | `marketplaceVerifyNoticeInterface` | Checks a notice's signature over its raw body, and reads its type and order id | signature | signature | SQS message, no signature | signature |
+| Orders | `marketplaceListChangedOrdersInterface` | Lists orders changed since a time, one page at a time | order list | released orders | search orders | get orders |
+| | `marketplaceGetOrderInterface` | Fetches one order as the common order, with the address when allowed | order detail | get an order | get order, then the address with a Restricted Data Token | get order |
+| | `marketplaceAcceptOrderInterface` | Tells the marketplace the order is taken | nothing | acknowledge orders | nothing | nothing |
+| Cancellations | `marketplaceListCancelRequestsInterface` | Lists buyer cancel requests since a time | search cancellations | cancelled line status | buyer-cancel flag on orders | cancellation requests |
+| | `marketplaceAnswerCancelRequestInterface` | Approves or rejects a request | approve, reject | nothing | through a feed | approve, reject |
+| | `marketplaceCancelLinesInterface` | Cancels an order or some lines | cancel order | cancel order lines | through a feed | create cancellation |
+| Shipments | `marketplaceConfirmShipmentInterface` | Sends packages with their lines, carrier and tracking | create or split packages, then ship each | shipping updates per line | confirm shipment | create shipping fulfillment |
+| Stock | `marketplaceSetStockInterface` | Sets sellable quantities per location, in groups | update inventory per warehouse | bulk inventory per ship node | update listing quantity | bulk update quantity |
+| | `marketplaceGetStockInterface` | Reads quantities back, for the hourly full check | inventory search | get inventory | get listing | get inventory item |
+| Returns | `marketplaceListReturnsInterface` | Lists returns started since a time | search returns | get returns | returns report | return requests |
+| | `marketplaceAnswerReturnInterface` | Approves or rejects a return | approve, reject | issue refund | nothing | answer return |
+
+Common rules for the contract:
+- List calls take a start time and a page token, and return the next page token.
+- Set and confirm calls take groups, and return the items that failed. Each package splits a group to the marketplace's size limit.
+- Every call returns the marketplace's own error code and message on failure.
+
+### Common objects
+
+| Object | Holds |
 | --- | --- |
-| `marketplaceAuthorizeInterface` | Builds the approval link, and turns the returned code into tokens |
-| `marketplaceRefreshTokenInterface` | Gets a new access token before the old one expires |
-| `marketplaceVerifyNoticeInterface` | Checks a notice's signature over its raw body |
-| `marketplaceFetchOrderInterface` | Fetches one order as the common order |
-| `marketplaceListChangedOrdersInterface` | Lists orders changed since a time |
-| `marketplaceCancelInterface` | Cancels an order or some lines |
-| `marketplaceShipInterface` | Sends carrier, tracking and lines |
-| `marketplaceSetStockInterface` | Sets sellable quantities, in groups |
-| `marketplaceFetchReturnsInterface` | Lists returns started since a time |
-| `marketplaceCheckShopInterface` | Tests the tokens and the shop |
+| Common order | Marketplace order id, status, order date, ship-by date, buyer window end, ship-to address (empty until allowed), shipping service, lines with marketplace line id, SKU, quantity and price |
+| Cancel request | Marketplace order id, lines, reason, who asked |
+| Package | Lines and quantities, carrier, service, tracking number, ship date |
+| Stock line | SKU, marketplace location, quantity |
+| Return | Marketplace order id, lines, quantities, reason, status |
 
-### The common order
+### Why one common order
 
-The common order is one JSON shape for all marketplaces: the order, its lines, the ship-to address, the shipping method and the marketplace references.
-An application can give its order service the same input from every way an order arrives.
+An application can give its order service the same input from every way an order arrives, whichever the marketplace.
 
 ## Rules
 
@@ -133,6 +166,8 @@ An application can give its order service the same input from every way an order
 - Never write a token to a log, a message or a test file.
 - Echo guard: a cancellation OFBiz sent is not handled again when the marketplace sends it back.
 - Back off when a marketplace says "too many requests", with growing waits.
+- Accept an order on the marketplace only after the application has recorded it.
+- Never send stock for a warehouse that has no location on the shop.
 - Refresh tokens before they expire. A token that cannot be refreshed sets the shop to "needs approval again".
 
 ## Security
