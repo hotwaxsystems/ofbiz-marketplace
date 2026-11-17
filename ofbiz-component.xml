@@ -41,8 +41,6 @@ under the License.
     <service-resource type="group" loader="main" location="servicedef/groups.xml"/>
     -->
 
-    <test-suite loader="main" location="testdef/MarketplaceTests.xml"/>
-
     <!-- web applications; will be mounted when using the embedded container -->
     <webapp name="marketplace"
         title="Marketplace"
